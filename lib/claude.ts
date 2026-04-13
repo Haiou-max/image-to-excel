@@ -33,16 +33,63 @@ const EXTRACTION_PROMPT = `你是一个产品图片信息提取专家。请从�
   ]
 }`;
 
-export async function extractFromImage(
-  imageBase64: string,
-  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-  apiKey: string,
-  baseURL?: string,
-  model?: string
-): Promise<ExtractionResult> {
-  const apiUrl = `${baseURL || "https://api.anthropic.com"}/v1/messages`;
+function isOpenAIModel(model: string): boolean {
+  return model.startsWith("gpt-") || model.startsWith("o1") || model.startsWith("o3") || model.startsWith("o4");
+}
 
-  const res = await fetch(apiUrl, {
+async function callOpenAI(
+  imageBase64: string,
+  mediaType: string,
+  apiKey: string,
+  baseURL: string,
+  model: string
+): Promise<string> {
+  const res = await fetch(`${baseURL}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_completion_tokens: 1024,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mediaType};base64,${imageBase64}`,
+              },
+            },
+            {
+              type: "text",
+              text: EXTRACTION_PROMPT,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callClaude(
+  imageBase64: string,
+  mediaType: string,
+  apiKey: string,
+  baseURL: string,
+  model: string
+): Promise<string> {
+  const res = await fetch(`${baseURL}/v1/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -50,7 +97,7 @@ export async function extractFromImage(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: model || "claude-sonnet-4-20250514",
+      model,
       max_tokens: 1024,
       messages: [
         {
@@ -79,9 +126,23 @@ export async function extractFromImage(
     throw new Error(err);
   }
 
-  const response = await res.json();
-  const text =
-    response.content?.[0]?.type === "text" ? response.content[0].text : "";
+  const data = await res.json();
+  return data.content?.[0]?.type === "text" ? data.content[0].text : "";
+}
+
+export async function extractFromImage(
+  imageBase64: string,
+  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+  apiKey: string,
+  baseURL?: string,
+  model?: string
+): Promise<ExtractionResult> {
+  const url = baseURL || "https://api.anthropic.com";
+  const mdl = model || "claude-sonnet-4-20250514";
+
+  const text = isOpenAIModel(mdl)
+    ? await callOpenAI(imageBase64, mediaType, apiKey, url, mdl)
+    : await callClaude(imageBase64, mediaType, apiKey, url, mdl);
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
