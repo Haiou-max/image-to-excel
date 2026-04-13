@@ -121,31 +121,87 @@ export default function ImageUploader({ onImagesChange }: Props) {
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const MAX = 1024;
-      let w = img.width;
-      let h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) {
-          h = Math.round((h * MAX) / w);
-          w = MAX;
+function getExifOrientation(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const view = new DataView(e.target!.result as ArrayBuffer);
+      // Not a JPEG
+      if (view.getUint16(0, false) !== 0xffd8) { resolve(1); return; }
+      let offset = 2;
+      while (offset < view.byteLength - 2) {
+        const marker = view.getUint16(offset, false);
+        offset += 2;
+        if (marker === 0xffe1) {
+          // APP1 (EXIF)
+          const length = view.getUint16(offset, false);
+          if (view.getUint32(offset + 2, false) !== 0x45786966) { resolve(1); return; } // "Exif"
+          const little = view.getUint16(offset + 8, false) === 0x4949;
+          const tags = view.getUint16(offset + 16, little);
+          for (let i = 0; i < tags; i++) {
+            const tagOffset = offset + 18 + i * 12;
+            if (tagOffset + 12 > offset + length) break;
+            if (view.getUint16(tagOffset, little) === 0x0112) {
+              resolve(view.getUint16(tagOffset + 8, little));
+              return;
+            }
+          }
+          resolve(1); return;
+        } else if ((marker & 0xff00) === 0xff00) {
+          offset += view.getUint16(offset, false);
         } else {
-          w = Math.round((w * MAX) / h);
-          h = MAX;
+          break;
         }
       }
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-      resolve(dataUrl.split(",")[1]);
+      resolve(1);
     };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    reader.onerror = () => resolve(1);
+    reader.readAsArrayBuffer(file.slice(0, 65536));
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    getExifOrientation(file).then((orientation) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX = 1024;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) {
+            h = Math.round((h * MAX) / w);
+            w = MAX;
+          } else {
+            w = Math.round((w * MAX) / h);
+            h = MAX;
+          }
+        }
+
+        // For orientation 5-8, swap canvas dimensions
+        const swap = orientation >= 5 && orientation <= 8;
+        const canvas = document.createElement("canvas");
+        canvas.width = swap ? h : w;
+        canvas.height = swap ? w : h;
+        const ctx = canvas.getContext("2d")!;
+
+        // Apply rotation/flip based on EXIF orientation
+        switch (orientation) {
+          case 2: ctx.transform(-1, 0, 0, 1, w, 0); break;
+          case 3: ctx.transform(-1, 0, 0, -1, w, h); break;
+          case 4: ctx.transform(1, 0, 0, -1, 0, h); break;
+          case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+          case 6: ctx.transform(0, 1, -1, 0, h, 0); break;
+          case 7: ctx.transform(0, -1, -1, 0, h, w); break;
+          case 8: ctx.transform(0, -1, 1, 0, 0, w); break;
+        }
+
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        resolve(dataUrl.split(",")[1]);
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
   });
 }
