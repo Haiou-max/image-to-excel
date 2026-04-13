@@ -203,7 +203,7 @@ export default function Home() {
                 </div>
               )}
 
-              <ResultTable data={results} onDataChange={setResults} autoFollowLatest={loading} />
+              <ResultTable data={results} onDataChange={setResults} />
 
               {!loading && (
                 <div className="flex gap-3">

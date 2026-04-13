@@ -26,7 +26,7 @@ export default function ImageUploader({ onImagesChange }: Props) {
         newImages.push({
           file,
           base64,
-          mediaType: file.size < 1024 * 1024 ? file.type : "image/png",
+          mediaType: "image/jpeg",
           preview: URL.createObjectURL(file),
         });
       }
@@ -123,18 +123,6 @@ export default function ImageUploader({ onImagesChange }: Props) {
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    // 如果图片小于 1MB，直接用原始文件
-    if (file.size < 1024 * 1024) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve(result.split(",")[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-      return;
-    }
-    // 大于 1MB 则压缩
     const img = new window.Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
@@ -154,7 +142,7 @@ function fileToBase64(file: File): Promise<string> {
       canvas.height = h;
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/png");
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
       resolve(dataUrl.split(",")[1]);
     };
     img.onerror = reject;
