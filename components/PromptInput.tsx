@@ -95,6 +95,23 @@ export default function PromptInput({ onPromptChange }: Props) {
 
   return (
     <div className="space-y-2">
+      <div className="flex gap-2">
+        {ORDER.map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => switchMode(m)}
+            className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+              mode === m
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            {LABELS[m]}
+          </button>
+        ))}
+      </div>
+
       <button
         type="button"
         onClick={() => setCollapsed(!collapsed)}
@@ -103,31 +120,14 @@ export default function PromptInput({ onPromptChange }: Props) {
         <span className={`transition-transform ${collapsed ? "" : "rotate-90"}`}>
           ▶
         </span>
-        提取规则
+        提取规则明细
         <span className="text-gray-400 font-normal">
-          （当前：{LABELS[mode]}）
+          （当前：{LABELS[mode]}，点击{collapsed ? "展开" : "收起"}查看/编辑）
         </span>
       </button>
 
       {!collapsed && (
         <div className="space-y-2">
-          <div className="flex gap-2">
-            {ORDER.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => switchMode(m)}
-                className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                  mode === m
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                {LABELS[m]}
-              </button>
-            ))}
-          </div>
-
           <textarea
             value={prompts[mode]}
             onChange={(e) => handleChange(e.target.value)}
